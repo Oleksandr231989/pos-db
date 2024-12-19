@@ -1,51 +1,57 @@
 import streamlit as st
 from streamlit_folium import st_folium
 import folium
+from folium.plugins import Draw
 from shapely.geometry import Point, Polygon
 import pandas as pd
-import json
 
-# Sample Address Dataset
-addresses = pd.DataFrame({
-    "Address ID": [1, 2, 3, 4],
-    "Address": ["123 Main St", "456 Elm St", "789 Pine St", "101 Oak St"],
-    "Latitude": [40.7128, 40.7150, 40.7190, 40.7135],
-    "Longitude": [-74.0060, -74.0100, -74.0080, -74.0050]
+# Sample Address Dataset (replace this with your real dataset)
+addresses_df = pd.DataFrame({
+    "Address ID": [1, 2, 3],
+    "Address": ["Address 1", "Address 2", "Address 3"],
+    "Latitude": [50.4501, 50.4547, 50.4591],
+    "Longitude": [30.5234, 30.5238, 30.5297]
 })
 
 # Streamlit App
-st.title("Draw Polygons and Link with Addresses")
+st.title("Territory Mapping with Named Polygons")
 
-# Map for Drawing Polygons
-m = folium.Map(location=[40.7128, -74.0060], zoom_start=14)
+# Map Initialization
+m = folium.Map(location=[addresses_df["Latitude"].mean(), addresses_df["Longitude"].mean()], zoom_start=12)
 
-# Add drawing functionality to the map
-from folium.plugins import Draw
+# Add markers for addresses
+for _, row in addresses_df.iterrows():
+    folium.Marker(location=[row["Latitude"], row["Longitude"]], popup=row["Address"]).add_to(m)
+
+# Add drawing tools
 draw = Draw(export=True)
 draw.add_to(m)
 
-# Display the map
-st.write("Draw a polygon on the map and click 'Save' in the drawing toolbar to process it.")
+# Display the map in Streamlit
+st.write("Draw a polygon on the map, name it, and save.")
 map_data = st_folium(m, width=700, height=500)
 
-# Process Polygon and Link Addresses
-if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
-    st.write("Polygon Coordinates:", map_data["last_active_drawing"]["geometry"]["coordinates"])
-    polygon_coords = map_data["last_active_drawing"]["geometry"]["coordinates"][0]
-    
-    # Create a Polygon
-    polygon = Polygon([(coord[0], coord[1]) for coord in polygon_coords])
+# Input for polygon name
+polygon_name = st.text_input("Enter a name for the polygon:", "")
 
-    # Check which addresses are inside the polygon
-    linked_addresses = []
-    for _, row in addresses.iterrows():
-        point = Point(row["Longitude"], row["Latitude"])
-        if polygon.contains(point):
-            linked_addresses.append(row)
-
-    # Display Linked Addresses
-    if linked_addresses:
-        st.write("Addresses inside the polygon:")
-        st.dataframe(pd.DataFrame(linked_addresses))
+# Button to save the polygon with the name
+if st.button("Save Polygon"):
+    if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
+        # Get polygon coordinates
+        polygon_coords = map_data["last_active_drawing"]["geometry"]["coordinates"][0]
+        
+        # Create Polygon object
+        polygon = Polygon([(coord[1], coord[0]) for coord in polygon_coords])  # Flip coordinates
+        
+        # Store polygon name and coordinates
+        st.session_state.setdefault("polygons", []).append({"name": polygon_name, "coordinates": polygon_coords})
+        
+        st.success(f"Polygon '{polygon_name}' saved successfully!")
     else:
-        st.write("No addresses found inside the polygon.")
+        st.error("No polygon drawn. Please draw a polygon first.")
+
+# Display saved polygons
+if "polygons" in st.session_state:
+    st.write("Saved Polygons:")
+    for poly in st.session_state["polygons"]:
+        st.write(f"Name: {poly['name']}, Coordinates: {poly['coordinates']}")
