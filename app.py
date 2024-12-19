@@ -3,21 +3,34 @@ from streamlit_folium import st_folium
 import folium
 from folium.plugins import Draw
 from shapely.geometry import Polygon
+import pandas as pd
 import json
+import random
+
+# Function to generate a random color in hexadecimal
+def random_color():
+    return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+
+# Address dataset (replace this with your actual dataset)
+addresses_df = pd.DataFrame({
+    "Address ID": [1, 2, 3],
+    "Address": ["Address 1", "Address 2", "Address 3"],
+    "Latitude": [50.4501, 50.4547, 50.4591],
+    "Longitude": [30.5234, 30.5238, 30.5297]
+})
 
 # Streamlit App
-st.title("Territory Mapping with Named Polygons and GeoJSON Export")
+st.title("Territory Mapping with Layer List and Automatic Coloring")
 
 # Initialize map
-m = folium.Map(location=[50.4501, 30.5234], zoom_start=12)
+m = folium.Map(location=[addresses_df["Latitude"].mean(), addresses_df["Longitude"].mean()], zoom_start=12)
 
-# Add drawing tools to the map
-draw = Draw(export=True)
-draw.add_to(m)
+# Add markers for addresses
+for _, row in addresses_df.iterrows():
+    folium.Marker(location=[row["Latitude"], row["Longitude"]], popup=row["Address"]).add_to(m)
 
-# Display the map
-st.write("Draw polygons on the map, name them, and export as GeoJSON.")
-map_data = st_folium(m, width=700, height=500)
+# Add Layer Control to manage layers
+layer_control = folium.LayerControl()
 
 # Initialize session state for polygons
 if "polygons" not in st.session_state:
@@ -26,31 +39,47 @@ if "polygons" not in st.session_state:
 # Input for polygon name
 polygon_name = st.text_input("Enter a name for the polygon:", "")
 
-# Button to save the polygon with the name
+# Button to save the polygon with a name and random color
 if st.button("Save Polygon"):
-    if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
-        # Get polygon coordinates
+    if map_data := st_folium(m, width=700, height=500) and "last_active_drawing" in map_data:
         polygon_geojson = map_data["last_active_drawing"]  # Get the GeoJSON for the polygon
         polygon_coords = polygon_geojson["geometry"]["coordinates"]
-        
-        # Validate polygon name
+
         if not polygon_name.strip():
             st.error("Please enter a valid name for the polygon.")
         else:
-            # Add the name to the GeoJSON's properties
-            polygon_geojson["properties"] = {"name": polygon_name}
+            # Assign a random color to the polygon
+            color = random_color()
+            polygon_geojson["properties"] = {"name": polygon_name, "color": color}
 
-            # Save the polygon to the session state
+            # Save the polygon to session state
             st.session_state["polygons"].append(polygon_geojson)
-            st.success(f"Polygon '{polygon_name}' saved successfully!")
-    else:
-        st.error("No polygon drawn. Please draw a polygon first.")
+            st.success(f"Polygon '{polygon_name}' saved with color {color}!")
 
-# Display saved polygons
+# Add saved polygons to the map
+for poly in st.session_state["polygons"]:
+    name = poly["properties"]["name"]
+    color = poly["properties"]["color"]
+    layer = folium.GeoJson(
+        poly,
+        style_function=lambda x, color=color: {
+            "fillColor": color,
+            "color": color,
+            "fillOpacity": 0.5,
+        },
+        name=name,
+    )
+    layer.add_to(m)
+    layer_control.add_to(m)
+
+# Display layer control on the map
+layer_control.add_to(m)
+
+# Display saved polygons list
 if st.session_state["polygons"]:
-    st.write("Saved Polygons:")
+    st.sidebar.write("### Created Layers")
     for poly in st.session_state["polygons"]:
-        st.write(f"Name: {poly['properties']['name']}, Coordinates: {poly['geometry']['coordinates']}")
+        st.sidebar.write(f"- **{poly['properties']['name']}** (Color: {poly['properties']['color']})")
 
 # Export polygons as GeoJSON
 if st.session_state["polygons"]:
@@ -58,8 +87,6 @@ if st.session_state["polygons"]:
         "type": "FeatureCollection",
         "features": st.session_state["polygons"],
     }
-
-    # Convert to JSON string
     geojson_str = json.dumps(geojson_data, indent=2)
 
     # Download button
