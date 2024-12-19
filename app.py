@@ -2,10 +2,13 @@ import streamlit as st
 from streamlit_folium import st_folium
 import folium
 from folium.plugins import Draw
-from shapely.geometry import Point, Polygon
 import pandas as pd
 import json
 import random
+
+# Function to generate a random color in hexadecimal
+def random_color():
+    return "#{:06x}".format(random.randint(0, 0xFFFFFF))
 
 # Address dataset (replace this with your actual dataset)
 addresses_df = pd.DataFrame({
@@ -17,10 +20,6 @@ addresses_df = pd.DataFrame({
 
 # Streamlit App
 st.title("Territory Mapping with Automatic Polygon Coloring")
-
-# Function to generate a random color in hexadecimal
-def random_color():
-    return "#{:06x}".format(random.randint(0, 0xFFFFFF))
 
 # Initialize map
 m = folium.Map(location=[addresses_df["Latitude"].mean(), addresses_df["Longitude"].mean()], zoom_start=12)
@@ -68,7 +67,11 @@ if st.button("Save Polygon"):
             # Add the polygon to the map with the color
             folium.GeoJson(
                 polygon_geojson,
-                style_function=lambda x: {"fillColor": x["properties"]["color"], "color": x["properties"]["color"], "fillOpacity": 0.5},
+                style_function=lambda x: {
+                    "fillColor": polygon_geojson["properties"]["color"],
+                    "color": polygon_geojson["properties"]["color"],
+                    "fillOpacity": 0.5,
+                },
                 name=polygon_name,
             ).add_to(m)
     else:
