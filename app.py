@@ -1,102 +1,58 @@
-import streamlit as st
-from streamlit_folium import st_folium
-import folium
-from folium.plugins import Draw
-import pandas as pd
-import json
-import random
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leaflet Polygons with Names</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <style>
+        #map { height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([50.4501, 30.5234], 12); // Centered on Kyiv
 
-# Function to generate a random color in hexadecimal
-def random_color():
-    return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        // Add a base layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
 
-# Address dataset (replace this with your actual dataset)
-addresses_df = pd.DataFrame({
-    "Address ID": [1, 2, 3],
-    "Address": ["Address 1", "Address 2", "Address 3"],
-    "Latitude": [50.4501, 50.4547, 50.4591],
-    "Longitude": [30.5234, 30.5238, 30.5297]
-})
+        // Create a feature group to store drawn polygons
+        var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
 
-# Streamlit App
-st.title("Territory Mapping with Automatic Polygon Coloring")
+        // Add drawing controls
+        var drawControl = new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: false }
+        });
+        map.addControl(drawControl);
 
-# Initialize map
-m = folium.Map(location=[addresses_df["Latitude"].mean(), addresses_df["Longitude"].mean()], zoom_start=12)
+        // Handle polygon creation
+        map.on('draw:created', function (e) {
+            var layer = e.layer; // Get the created layer
+            var polygonName = prompt("Enter a name for this polygon:"); // Ask for polygon name
+            if (polygonName) {
+                // Bind the name as a popup
+                layer.bindPopup("Polygon Name: " + polygonName);
 
-# Add markers for addresses
-for _, row in addresses_df.iterrows():
-    folium.Marker(location=[row["Latitude"], row["Longitude"]], popup=row["Address"]).add_to(m)
+                // Optionally, store the name in the layer's properties for export
+                layer.feature = { properties: { name: polygonName } };
+            }
 
-# Add drawing tools to the map
-draw = Draw(export=True)
-draw.add_to(m)
+            // Add the polygon to the drawn items group
+            drawnItems.addLayer(layer);
+        });
 
-# Display the map
-st.write("Draw polygons on the map, name them, and automatically assign colors.")
-map_data = st_folium(m, width=700, height=500)
-
-# Initialize session state for polygons
-if "polygons" not in st.session_state:
-    st.session_state["polygons"] = []
-
-# Input for polygon name
-polygon_name = st.text_input("Enter a name for the polygon:", "")
-
-# Button to save the polygon with the name and random color
-if st.button("Save Polygon"):
-    if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
-        # Get polygon coordinates
-        polygon_geojson = map_data["last_active_drawing"]  # Get the GeoJSON for the polygon
-        polygon_coords = polygon_geojson["geometry"]["coordinates"]
-
-        # Validate polygon name
-        if not polygon_name.strip():
-            st.error("Please enter a valid name for the polygon.")
-        else:
-            # Assign a random color to the polygon
-            color = random_color()
-
-            # Add the name and color to the GeoJSON's properties
-            polygon_geojson["properties"] = {"name": polygon_name, "color": color}
-
-            # Save the polygon to the session state
-            st.session_state["polygons"].append(polygon_geojson)
-            st.success(f"Polygon '{polygon_name}' saved with color {color}!")
-
-            # Add the polygon to the map with the color
-            folium.GeoJson(
-                polygon_geojson,
-                style_function=lambda x: {
-                    "fillColor": polygon_geojson["properties"]["color"],
-                    "color": polygon_geojson["properties"]["color"],
-                    "fillOpacity": 0.5,
-                },
-                name=polygon_name,
-            ).add_to(m)
-    else:
-        st.error("No polygon drawn. Please draw a polygon first.")
-
-# Display saved polygons
-if st.session_state["polygons"]:
-    st.write("Saved Polygons:")
-    for poly in st.session_state["polygons"]:
-        st.write(f"Name: {poly['properties']['name']}, Color: {poly['properties']['color']}")
-
-# Export polygons as GeoJSON
-if st.session_state["polygons"]:
-    geojson_data = {
-        "type": "FeatureCollection",
-        "features": st.session_state["polygons"],
-    }
-
-    # Convert to JSON string
-    geojson_str = json.dumps(geojson_data, indent=2)
-
-    # Download button
-    st.download_button(
-        label="Download Polygons as GeoJSON",
-        data=geojson_str,
-        file_name="polygons.geojson",
-        mime="application/geo+json",
-    )
+        // Example: Click on any polygon to see its name
+        drawnItems.on('click', function (e) {
+            e.layer.openPopup(); // Show popup when clicked
+        });
+    </script>
+</body>
+</html>
